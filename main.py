@@ -7,12 +7,6 @@ class App:
         self.root.title("Minesweeper in tkinter")
 
         self.width, self.height = width, height
-
-        self.create_board()
-
-        self.game_started = False
-
-    def create_board(self):
         self.root.geometry(f"{self.width*25}x{self.height*25}")
         self.root.minsize(self.width*15, self.height*15)
 
@@ -23,79 +17,63 @@ class App:
         self.frame.grid(row=0, column=0, sticky="news")
 
         self.cells = [[None for j in range(self.width)] for i in range(self.height)]
+
         for r in range(self.height):
             for c in range(self.width):
-                # button = tk.Frame(self.frame, command=(lambda row=r, column=c: self.reveal(row, column)),
-                #                             bg="white", relief="raised", highlightthickness=2)
-                button = tk.Frame(self.frame, bg="white", relief="raised", highlightthickness=2, variable=tk.IntVar(0))
+                button = tk.Frame(self.frame, bg="white", relief="raised", highlightthickness=2)
                 button.grid(row=r, column=c, sticky="news")
                 button.bind("<Button-1>", self.reveal)
                 button.bind("<Button-3>", self.mark)
-                self.cells[r][c] = button
+                self.cells[r][c] = [button, ""]
             
         self.frame.columnconfigure(tuple(range(self.width)), weight=1)
         self.frame.rowconfigure(tuple(range(self.height)), weight=1)
 
+        self.game_started = False
+        self.bombs = bombs
+
+    def place_bombs(self, r, c):
+        safe_cells = 9
+        if (r in [0, self.height-1] and c in [0, self.width-1]): 
+            safe_cells -= 5
+        if (r == 0 or r == self.height-1) ^ (c == 0 or c == self.width-1): 
+            safe_cells -= 3
+        print(safe_cells)
+        p = 1 / (self.width*self.height - safe_cells)
+        mask = np.full((self.height,self.width), p)
+        # Using slice set surrunding cells as zero
+        mask[max(r-1,0) : min(r+2,self.height)  ,  max(c-1,0) : min(c+2,self.width)] = 0
+        # Flattened indices
+        bomb_indices = np.random.choice(self.width*self.height, self.bombs, replace=False, p = mask.flatten())
+        self.board = np.zeros((self.height*self.width))
+        self.board[bomb_indices] = -1
+        self.board.reshape((self.height, self.width))
+        
     def reveal(self, event: tk.Event):
         info = event.widget.grid_info()
         row, column = info["row"], info["column"]
-        event.widget.configure(bg="red")
-        print(row, column)
-        print(event.widget.variable)
-
-    def mark(self):
-        pass
-
-    
-    def register_opening(self, pos):
-        if not self.game_started:
-            self.create_board(pos)
-            self.game_started == True
-        if self.cells[pos[0]][pos[1]].is_bomb:
-            for r in range(self.height):
-                for c in range(self.width):
-                    if self.cells[r][c].is_bomb:
-                        self.cells[r][c].configure(bg="red")
-            return
-        
-        
-
-class Cell:
-    min_width, min_height = 15, 15
-    board = []
-    def __init__(self, position: tuple, parent_frame: tk.Frame, is_bomb: bool, register_opening: callable):
-        self.button = tk.Frame(parent_frame, bg="white", relief="raised", highlightthickness=2)
-        self.button.grid(row=position[0], column=position[1], sticky="news")
-        self.button.bind("<Button-1>", self.reveal)
-        self.button.bind("<Button-3>", self.mark)
-        
-        self.position = position
-        self.label = ""
-        self.is_bomb = is_bomb
-        self.register_opening = register_opening
-
-    def reveal(self, event: tk.Event):
-        if self.is_bomb:
+        if self.cells[row][column][1] == "":
+            self.cells[row][column][1] = "opened"
             event.widget.configure(bg="red")
-            return
-        number = self.register_opening(self.position)
-        if number == 0:
-            for r in range(self.position[0]-1, self.position[0]+2):
-                for c in range(self.position[1]-1, self.position[1]+2):
-                    pass
+            self.place_bombs(row, column)
 
-    def mark(self, event):
-        if self.label == "":
+    def mark(self, event: tk.Event):
+        info = event.widget.grid_info()
+        row, column = info["row"], info["column"]
+        print(row, column)
+        label = self.cells[row][column][1]
+        if label == "":
             event.widget.configure(bg="green")
-            self.label = "safe"
-        elif self.label == "safe":
+            label = "safe"
+        elif label == "safe":
             event.widget.configure(bg="blue")
-            self.label = "unsure"
-        elif self.label == "unsure":
+            label = "unsure"
+        elif label == "unsure":
             event.widget.configure(bg="white")
-            self.label = ""
+            label = ""
+        self.cells[row][column][1] = label
 
 
 if __name__ == "__main__":
-    app = App(36, 24, 32)
+    app = App(16, 16, 99)
     app.root.mainloop()
