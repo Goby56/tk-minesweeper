@@ -7,7 +7,7 @@ class App:
         self.root = tk.Tk()
         self.root.title("Minesweeper in tkinter")
 
-        self.columns, self.rows = dimensions
+        self.rows, self.columns = dimensions
         self.tile_size = [cell_size, cell_size]
         self.root.geometry(f"{self.columns*cell_size}x{self.rows*cell_size}")
         self.root.minsize(self.columns*15, self.rows*15)
@@ -39,6 +39,18 @@ class App:
         self.game_over = False
         self.number_of_bombs = number_of_bombs
 
+        self.selected_cell = [self.rows//2, self.columns//2]
+        self.bind_navigation_keys()
+
+    def move_selection(self, new_pos):
+        row, column = new_pos
+        self.selected_cell = [row, column]
+        # overlay_tk_label = self.cell_labels[row][column][3]
+        # img = self.tile_images["selected"].resize(self.tile_size) # PIL Image resized to current tile_size
+        # photo_img = ImageTk.PhotoImage(img) # Convert to tk image
+        # overlay_tk_label.configure(image=photo_img) # Set image
+        # overlay_tk_label.image = photo_img # Mandatory reference
+
     def clicked_on_cell(self, event: tk.Event):
         info = event.widget.grid_info()
         row, column = info["row"], info["column"]
@@ -51,12 +63,14 @@ class App:
         self.reveal_cell(row, column)
         if self.cell_labels[row][column][1] in "12345678":
             self.quick_reveal(row, column)
+        event.widget.configure(fg="yellow")
 
     def mark_cell(self, event: tk.Event):
         if self.game_over:
             return
         info = event.widget.grid_info()
         row, column = info["row"], info["column"]
+        print(self.selected_cell)
         label = self.cell_labels[row][column][1]
         if label == "":
             self.cell_labels[row][column][1] = "safe"
@@ -165,9 +179,24 @@ class App:
             "": tiles[0], "safe": tiles[1], "-1": tiles[2], "0": tiles[3],
             "1": tiles[4], "2": tiles[5], "3": tiles[6], "4": tiles[7],
             "5": tiles[8], "6": tiles[9], "7": tiles[10], "8": tiles[11],
-            "unsure": Image.open("qm.png")
+            "unsure": Image.open("qm.png"), "selected": Image.open("select.png")
         }
+    
+    def bind_navigation_keys(self):
+        clamp_coordinate = lambda r, c: [max(min(self.rows-1, r), 0), max(min(self.columns-1, c), 0)]
+        self.root.bind("w", lambda event: (
+            self.move_selection(clamp_coordinate(self.selected_cell[0]-1, self.selected_cell[1]))
+            ))
+        self.root.bind("a", lambda event: (
+            self.move_selection(clamp_coordinate(self.selected_cell[0], self.selected_cell[1]-1))
+            ))
+        self.root.bind("s", lambda event: (
+            self.move_selection(clamp_coordinate(self.selected_cell[0]+1, self.selected_cell[1]))
+            ))
+        self.root.bind("d", lambda event: (
+            self.move_selection(clamp_coordinate(self.selected_cell[0], self.selected_cell[1]+1))
+            ))
         
-if __name__ == "__main__":
+if __name__ == "__main__": 
     app = App(dimensions=(16,16), cell_size=40, number_of_bombs=75)
     app.root.mainloop()
