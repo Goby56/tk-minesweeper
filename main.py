@@ -24,13 +24,11 @@ class App:
 
         for r in range(self.height):
             for c in range(self.width):
-                tk_frame = tk.Frame(self.frame)
-                tk_frame.grid(row=r, column=c, sticky="news")
-                tk_frame.bind("<Button-1>", self.reveal)
-                tk_frame.bind("<Button-3>", self.mark)
-                tk_label = tk.Label(tk_frame)
-                tk_label.pack()
-                self.cells[r][c] = [tk_frame, ""]
+                tk_label = tk.Label(self.frame)
+                tk_label.grid(row=r, column=c, sticky="news")
+                tk_label.bind("<Button-1>", self.reveal)
+                tk_label.bind("<Button-3>", self.mark)
+                self.cells[r][c] = [tk_label, ""]
                 self.update_tile_image(r, c)
             
         self.frame.columnconfigure(tuple(range(self.width)), weight=1)
@@ -43,6 +41,7 @@ class App:
         img = Image.open("tiles.png")
         tiles = []
         img_width = img.width/4
+        print(img_width)
         img_height = img.height/3
         for r in range(3):
             for c in range(4):
@@ -50,17 +49,18 @@ class App:
         self.tile_images = {
             "": tiles[0], "safe": tiles[1], "-1": tiles[2], "0": tiles[3],
             "1": tiles[4], "2": tiles[5], "3": tiles[6], "4": tiles[7],
-            "5": tiles[8], "6": tiles[9], "7": tiles[10], "8": tiles[11]
+            "5": tiles[8], "6": tiles[9], "7": tiles[10], "8": tiles[11],
+            "unsure": Image.open("question_mark.jpg")
         }
 
     def update_tile_image(self, r, c):
-        tk_frame = self.cells[r][c][0]
+        tk_label = self.cells[r][c][0]
         label = self.cells[r][c][1]
         # tile_size = (tk_frame.winfo_width(), tk_frame.winfo_height())
         tile_size = (25,25)
         img = self.tile_images[label].resize(tile_size)
         photo_img = ImageTk.PhotoImage(img)
-        tk_label = tk_frame.winfo_children()[0]
+        # tk_label = tk_frame.winfo_children()[0]
         tk_label.configure(image=photo_img)
         tk_label.image = photo_img
 
@@ -118,15 +118,14 @@ class App:
         print(row, column)
         label = self.cells[row][column][1]
         if label == "":
-            event.widget.configure(bg="green")
-            label = "safe"
+            self.cells[row][column][1] = "safe"
+            self.update_tile_image(row, column)
         elif label == "safe":
-            event.widget.configure(bg="blue")
-            label = "unsure"
+            self.cells[row][column][1] = "unsure"
+            self.update_tile_image(row, column)
         elif label == "unsure":
-            event.widget.configure(bg="white")
-            label = ""
-        self.cells[row][column][1] = label
+            self.cells[row][column][1] = ""
+            self.update_tile_image(row, column)
 
 
 if __name__ == "__main__":
