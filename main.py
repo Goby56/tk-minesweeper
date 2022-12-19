@@ -38,35 +38,64 @@ class App:
         self.game_started = False
         self.game_over = False
         self.number_of_bombs = number_of_bombs
-        
-    def load_tile_images(self):
-        img = Image.open("tiles.png")
-        tiles = []
-        img_width = img.width/4
-        img_height = img.height/3
-        for r in range(3):
-            for c in range(4):
-                tiles.append(img.crop((img_width*c, img_height*r, img_width*(c+1), img_height*(r+1))))
-        self.tile_images = {
-            "": tiles[0], "safe": tiles[1], "-1": tiles[2], "0": tiles[3],
-            "1": tiles[4], "2": tiles[5], "3": tiles[6], "4": tiles[7],
-            "5": tiles[8], "6": tiles[9], "7": tiles[10], "8": tiles[11],
-            "unsure": Image.open("qm.png")
-        }
 
-    def update_tile_image(self, r, c):
-        tk_label: tk.Label = self.cell_labels[r][c][0] # Grab tk.Label in cell
-        label = self.cell_labels[r][c][1] # Label value
-        img = self.tile_images[label].resize(self.tile_size) # PIL Image resized to current tile_size
-        photo_img = ImageTk.PhotoImage(img) # Convert to tk image
-        tk_label.configure(image=photo_img) # Set image
-        tk_label.image = photo_img # Mandatory reference
+    def clicked_on_cell(self, event: tk.Event):
+        info = event.widget.grid_info()
+        row, column = info["row"], info["column"]
+        if not self.game_started: # If game has not started, place bombs and distribute bomb numbers
+            self.game_started = True
+            self.place_bombs(row, column)
+            self.count_bombs()
+        if self.game_over:
+            return
+        self.reveal_cell(row, column)
+        if self.cell_labels[row][column][1] in "12345678":
+            self.quick_reveal(row, column)
 
-    def on_window_resize(self, event: tk.Event):
-        self.tile_size = (event.width // self.columns, event.height // self.rows)
+    def mark_cell(self, event: tk.Event):
+        if self.game_over:
+            return
+        info = event.widget.grid_info()
+        row, column = info["row"], info["column"]
+        label = self.cell_labels[row][column][1]
+        if label == "":
+            self.cell_labels[row][column][1] = "safe"
+            self.update_tile_image(row, column)
+        elif label == "safe":
+            self.cell_labels[row][column][1] = "unsure"
+            self.update_tile_image(row, column)
+        elif label == "unsure":
+            self.cell_labels[row][column][1] = ""
+            self.update_tile_image(row, column)
+        bombs_left = self.number_of_bombs
         for r in range(self.rows):
             for c in range(self.columns):
-                self.update_tile_image(r, c)
+                if self.cell_labels[r][c][1] == "safe":
+                    bombs_left -= 1
+        self.root.title(f"Minesweeper in tkinter | Bombs left: {bombs_left}")
+
+    def reveal_cell(self, row, column):
+        if self.cell_labels[row][column][1] != "":
+            return # If cell already is opened
+        label = str(int(self.board_values[row,column]))
+        self.cell_labels[row][column][1] = label # Acts as opening the cell
+        self.update_tile_image(row, column)
+        if label == "-1":
+            self.handle_game_over()
+        if label != "0":
+            return # If there are surrounding bombs don't reveal recursively
+        for r, c in self.get_surrounding_indices(row, column):
+            self.reveal_cell(r, c)
+
+    def quick_reveal(self, row, column):
+        number_of_surrounding_flags = 0
+        for r, c in self.get_surrounding_indices(row, column):
+            if self.cell_labels[r][c][1] == "safe":
+                number_of_surrounding_flags += 1
+        if number_of_surrounding_flags != int(self.cell_labels[row][column][1]):
+            return
+        for r, c in self.get_surrounding_indices(row, column):
+            self.reveal_cell(r, c)
 
     def place_bombs(self, r, c):
         safe_cells = 9 # 9 cells safe in beginning
@@ -97,76 +126,47 @@ class App:
                 for r, c in self.get_surrounding_indices(row,column):
                     number_of_surrounding_bombs += 1 if self.board_values[r,c] == -1 else 0
                 self.board_values[row,column] = number_of_surrounding_bombs
-
-    def get_surrounding_indices(self, row, column):
-        for r in range(max(row-1, 0), min(row+2, self.rows)):
-            for c in range(max(column-1, 0), min(column+2, self.columns)):
-                yield (r, c)
-
-    def clicked_on_cell(self, event: tk.Event):
-        info = event.widget.grid_info()
-        row, column = info["row"], info["column"]
-        if not self.game_started: # If game has not started, place bombs and distribute bomb numbers
-            self.game_started = True
-            self.place_bombs(row, column)
-            self.count_bombs()
-        if self.game_over:
-            return
-        self.reveal_cell(row, column)
-        if self.cell_labels[row][column][1] in "12345678":
-            self.quick_reveal(row, column)
-
-    def quick_reveal(self, row, column):
-        number_of_surrounding_flags = 0
-        for r, c in self.get_surrounding_indices(row, column):
-            if self.cell_labels[r][c][1] == "safe":
-                number_of_surrounding_flags += 1
-        if number_of_surrounding_flags != int(self.cell_labels[row][column][1]):
-            return
-        for r, c in self.get_surrounding_indices(row, column):
-            self.reveal_cell(r, c)
-
-    def reveal_cell(self, row, column):
-        if self.cell_labels[row][column][1] != "":
-            return # If cell already is opened
-        label = str(int(self.board_values[row,column]))
-        self.cell_labels[row][column][1] = label # Acts as opening the cell
-        self.update_tile_image(row, column)
-        if label == "-1":
-            self.handle_game_over()
-        if label != "0":
-            return # If there are surrounding bombs don't reveal recursively
-        for r, c in self.get_surrounding_indices(row, column):
-            self.reveal_cell(r, c)
-
-    def mark_cell(self, event: tk.Event):
-        if self.game_over:
-            return
-        info = event.widget.grid_info()
-        row, column = info["row"], info["column"]
-        label = self.cell_labels[row][column][1]
-        if label == "":
-            self.cell_labels[row][column][1] = "safe"
-            self.update_tile_image(row, column)
-        elif label == "safe":
-            self.cell_labels[row][column][1] = "unsure"
-            self.update_tile_image(row, column)
-        elif label == "unsure":
-            self.cell_labels[row][column][1] = ""
-            self.update_tile_image(row, column)
-        bombs_left = self.number_of_bombs
-        for r in range(self.rows):
-            for c in range(self.columns):
-                if self.cell_labels[r][c][1] == "safe":
-                    bombs_left -= 1
-        self.root.title(f"Minesweeper in tkinter | Bombs left: {bombs_left}")
-        
+    
     def handle_game_over(self):
         self.game_over = True
         for row in range(self.rows):
             for column in range(self.columns):
                 if self.board_values[row,column] == -1:
                     self.reveal_cell(row, column)
+
+    def get_surrounding_indices(self, row, column):
+        for r in range(max(row-1, 0), min(row+2, self.rows)):
+            for c in range(max(column-1, 0), min(column+2, self.columns)):
+                yield (r, c)
+
+    def update_tile_image(self, r, c):
+        tk_label: tk.Label = self.cell_labels[r][c][0] # Grab tk.Label in cell
+        label = self.cell_labels[r][c][1] # Label value
+        img = self.tile_images[label].resize(self.tile_size) # PIL Image resized to current tile_size
+        photo_img = ImageTk.PhotoImage(img) # Convert to tk image
+        tk_label.configure(image=photo_img) # Set image
+        tk_label.image = photo_img # Mandatory reference
+
+    def on_window_resize(self, event: tk.Event):
+        self.tile_size = (event.width // self.columns, event.height // self.rows)
+        for r in range(self.rows):
+            for c in range(self.columns):
+                self.update_tile_image(r, c)
+        
+    def load_tile_images(self):
+        img = Image.open("tiles.png")
+        tiles = []
+        img_width = img.width/4
+        img_height = img.height/3
+        for r in range(3):
+            for c in range(4):
+                tiles.append(img.crop((img_width*c, img_height*r, img_width*(c+1), img_height*(r+1))))
+        self.tile_images = {
+            "": tiles[0], "safe": tiles[1], "-1": tiles[2], "0": tiles[3],
+            "1": tiles[4], "2": tiles[5], "3": tiles[6], "4": tiles[7],
+            "5": tiles[8], "6": tiles[9], "7": tiles[10], "8": tiles[11],
+            "unsure": Image.open("qm.png")
+        }
         
 if __name__ == "__main__":
     app = App(dimensions=(16,16), cell_size=40, number_of_bombs=75)
