@@ -39,21 +39,39 @@ class App:
         self.game_over = False
         self.number_of_bombs = number_of_bombs
 
-        self.selected_cell = [self.rows//2, self.columns//2]
-        self.bind_navigation_keys()
+        self.selected_cell = [self.rows//2 - 1, self.columns//2 - 1]
+        self.bind_keyboard_keys()
 
     def move_selection(self, new_pos):
-        row, column = new_pos
-        self.selected_cell = [row, column]
-        # overlay_tk_label = self.cell_labels[row][column][3]
-        # img = self.tile_images["selected"].resize(self.tile_size) # PIL Image resized to current tile_size
-        # photo_img = ImageTk.PhotoImage(img) # Convert to tk image
-        # overlay_tk_label.configure(image=photo_img) # Set image
-        # overlay_tk_label.image = photo_img # Mandatory reference
+        r, c = new_pos
+        pr, pc = self.selected_cell # Previous coordinates
+        self.selected_cell = new_pos
 
-    def clicked_on_cell(self, event: tk.Event):
-        info = event.widget.grid_info()
-        row, column = info["row"], info["column"]
+        # Remove previous outline
+        tk_label = self.cell_labels[pr][pc][0] # Grab tk.Label in cell
+        label = self.cell_labels[pr][pc][1] # Label value
+        img = self.tile_images[label].resize(self.tile_size) # PIL Image resized to current tile_size
+        photo_img = ImageTk.PhotoImage(img) # Convert to tk image
+        tk_label.configure(image=photo_img) # Set image
+        tk_label.image = photo_img # Mandatory reference
+
+        # Add outline on current selection
+        tk_label: tk.Label = self.cell_labels[r][c][0] # Grab tk.Label in cell
+        label = self.cell_labels[r][c][1] # Label value
+        img = self.tile_images[label].resize(self.tile_size) # PIL Image resized to current tile_size
+        outline_img = self.tile_images["selected"].resize(self.tile_size) 
+        img.paste(outline_img, mask=outline_img)
+        photo_img = ImageTk.PhotoImage(img) # Convert to tk image
+        tk_label.configure(image=photo_img) # Set image
+        tk_label.image = photo_img # Mandatory reference
+
+    def clicked_on_cell(self, event: tk.Event, pos=None):
+        if pos == None:
+            info = event.widget.grid_info()
+            row, column = info["row"], info["column"]
+            self.move_selection((row, column)) # TODO Only select while holding
+        else:
+            row, column = pos
         if not self.game_started: # If game has not started, place bombs and distribute bomb numbers
             self.game_started = True
             self.place_bombs(row, column)
@@ -63,14 +81,15 @@ class App:
         self.reveal_cell(row, column)
         if self.cell_labels[row][column][1] in "12345678":
             self.quick_reveal(row, column)
-        event.widget.configure(fg="yellow")
 
-    def mark_cell(self, event: tk.Event):
+    def mark_cell(self, event: tk.Event, pos=None):
         if self.game_over:
             return
-        info = event.widget.grid_info()
-        row, column = info["row"], info["column"]
-        print(self.selected_cell)
+        if pos == None:
+            info = event.widget.grid_info()
+            row, column = info["row"], info["column"]
+        else:
+            row, column = pos
         label = self.cell_labels[row][column][1]
         if label == "":
             self.cell_labels[row][column][1] = "safe"
@@ -182,21 +201,28 @@ class App:
             "unsure": Image.open("qm.png"), "selected": Image.open("select.png")
         }
     
-    def bind_navigation_keys(self):
+    def bind_keyboard_keys(self):
         clamp_coordinate = lambda r, c: [max(min(self.rows-1, r), 0), max(min(self.columns-1, c), 0)]
         self.root.bind("w", lambda event: (
             self.move_selection(clamp_coordinate(self.selected_cell[0]-1, self.selected_cell[1]))
-            ))
+        ))
         self.root.bind("a", lambda event: (
             self.move_selection(clamp_coordinate(self.selected_cell[0], self.selected_cell[1]-1))
-            ))
+        ))
         self.root.bind("s", lambda event: (
             self.move_selection(clamp_coordinate(self.selected_cell[0]+1, self.selected_cell[1]))
-            ))
+        ))
         self.root.bind("d", lambda event: (
             self.move_selection(clamp_coordinate(self.selected_cell[0], self.selected_cell[1]+1))
-            ))
+        ))
+
+        self.root.bind("<space>", lambda event: (
+            self.mark_cell(event, self.selected_cell)
+        ))
+        self.root.bind("<Return>", lambda event: (
+            self.clicked_on_cell(event, self.selected_cell)
+        ))
         
 if __name__ == "__main__": 
-    app = App(dimensions=(16,16), cell_size=40, number_of_bombs=75)
+    app = App(dimensions=(16,24), cell_size=40, number_of_bombs=99)
     app.root.mainloop()
