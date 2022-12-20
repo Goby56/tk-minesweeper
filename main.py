@@ -167,6 +167,13 @@ class App:
                 if self.board_values[row,column] == -1:
                     self.reveal_cell(row, column)
 
+    def clear_board(self):
+        self.game_over, self.game_started = False, False
+        for row in range(self.rows):
+            for column in range(self.columns):
+                self.cell_labels[row][column][1] = ""
+                self.update_tile_image(row, column)
+
     def get_surrounding_indices(self, row, column):
         for r in range(max(row-1, 0), min(row+2, self.rows)):
             for c in range(max(column-1, 0), min(column+2, self.columns)):
@@ -222,7 +229,11 @@ class App:
         self.root.bind("<Return>", lambda event: (
             self.clicked_on_cell(event, self.selected_cell)
         ))
+        self.root.bind("<Escape>", lambda event: (
+            self.clear_board()
+        ))
+
         
 if __name__ == "__main__": 
-    app = App(dimensions=(16,24), cell_size=40, number_of_bombs=99)
+    app = App(dimensions=(12,12), cell_size=40, number_of_bombs=24)
     app.root.mainloop()
