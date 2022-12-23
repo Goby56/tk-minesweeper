@@ -1,6 +1,7 @@
 import tkinter as tk
 import numpy as np
 from PIL import ImageTk, Image
+import time
 
 from utils import Utils
 from solver import Solver
@@ -82,6 +83,7 @@ class App:
         self.reveal_cell(row, column)
         if self.cell_labels[row][column][1] in "12345678":
             self.quick_reveal(row, column)
+        self.check_for_win()
 
     def mark_cell(self, event: tk.Event, pos=None):
         if self.game_over:
@@ -106,6 +108,7 @@ class App:
             if self.cell_labels[r][c][1] == "safe":
                 bombs_left -= 1
         self.root.title(f"Minesweeper in tkinter | Bombs left: {bombs_left}")
+        self.check_for_win()
 
     def reveal_cell(self, row, column):
         if self.cell_labels[row][column][1] != "":
@@ -133,8 +136,8 @@ class App:
     def start_game(self, row, column):
         self.place_bombs(row, column) # Distribute bombs
         self.count_bombs() # Assign numbers to cells
-        solver = Solver(self.board_values, (row, column))
-        solver.solve_board()
+        # solver = Solver(self.board_values, (row, column))
+        # solver.solve_board()
         # while True:
         #     self.place_bombs(row, column) # Distribute bombs
         #     self.count_bombs() # Assign numbers to cells
@@ -142,18 +145,28 @@ class App:
         #     if solver.solve_board() == True:
         #         break
         self.game_started = True
+        self.start_time = time.time()
 
     def handle_game_over(self):
         self.game_over = True
         for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
             if self.board_values[r,c] == -1:
                 self.reveal_cell(r, c)
+        self.root.title(f"Minesweeper in tkinter | GAME OVER :(")
 
     def clear_board(self):
         self.game_over, self.game_started = False, False
         for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
             self.cell_labels[r][c][1] = ""
             self.update_tile_image(r, c)
+
+    def check_for_win(self):
+        for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
+            if self.cell_labels[r][c][1] == "":
+                return
+        self.game_over = True
+        self.root.title(f"Minesweeper in tkinter | GAME WON in {(time.time() - self.start_time):.2f}s")
+
 
     def place_bombs(self, r, c):
         safe_cells = 9 # 9 cells safe in beginning
@@ -238,5 +251,5 @@ class App:
 
         
 if __name__ == "__main__": 
-    app = App(dimensions=(12,12), cell_size=40, number_of_bombs=24)
+    app = App(dimensions=(12,12), cell_size=40, number_of_bombs=8)
     app.root.mainloop()
