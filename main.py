@@ -2,6 +2,9 @@ import tkinter as tk
 import numpy as np
 from PIL import ImageTk, Image
 
+from utils import Utils
+from solver import Solver
+
 class App:
     def __init__(self, dimensions: tuple, cell_size: int, number_of_bombs: int):
         self.root = tk.Tk()
@@ -23,14 +26,14 @@ class App:
 
         self.cell_labels = [[None for j in range(self.columns)] for i in range(self.rows)]
 
-        for r in range(self.rows):
-            for c in range(self.columns):
-                tk_label = tk.Label(self.frame)
-                tk_label.grid(row=r, column=c, sticky="news")
-                tk_label.bind("<Button-1>", self.clicked_on_cell)
-                tk_label.bind("<Button-3>", self.mark_cell)
-                self.cell_labels[r][c] = [tk_label, ""]
-                self.update_tile_image(r, c)
+        for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
+            tk_label = tk.Label(self.frame)
+            tk_label.grid(row=r, column=c, sticky="news")
+            tk_label.bind("<Button-1>", self.clicked_on_cell)
+            tk_label.bind("<Button-3>", self.mark_cell)
+            self.cell_labels[r][c] = [tk_label, ""] 
+            # Actual button reference, Label reference used for visuals
+            self.update_tile_image(r, c)
             
         self.frame.columnconfigure(tuple(range(self.columns)), weight=1)
         self.frame.rowconfigure(tuple(range(self.rows)), weight=1)
@@ -72,12 +75,10 @@ class App:
             self.move_selection((row, column)) # TODO Only select while holding
         else:
             row, column = pos
-        if not self.game_started: # If game has not started, place bombs and distribute bomb numbers
-            self.game_started = True
-            self.place_bombs(row, column)
-            self.count_bombs()
         if self.game_over:
             return
+        if not self.game_started: # If game has not started, start it
+            self.start_game(row, column)
         self.reveal_cell(row, column)
         if self.cell_labels[row][column][1] in "12345678":
             self.quick_reveal(row, column)
@@ -101,10 +102,9 @@ class App:
             self.cell_labels[row][column][1] = ""
             self.update_tile_image(row, column)
         bombs_left = self.number_of_bombs
-        for r in range(self.rows):
-            for c in range(self.columns):
-                if self.cell_labels[r][c][1] == "safe":
-                    bombs_left -= 1
+        for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
+            if self.cell_labels[r][c][1] == "safe":
+                bombs_left -= 1
         self.root.title(f"Minesweeper in tkinter | Bombs left: {bombs_left}")
 
     def reveal_cell(self, row, column):
@@ -117,18 +117,43 @@ class App:
             self.handle_game_over()
         if label != "0":
             return # If there are surrounding bombs don't reveal recursively
-        for r, c in self.get_surrounding_indices(row, column):
+        for r, c in Utils.get_surrounding_indices(row, column, self.rows, self.columns):
             self.reveal_cell(r, c)
 
     def quick_reveal(self, row, column):
         number_of_surrounding_flags = 0
-        for r, c in self.get_surrounding_indices(row, column):
+        for r, c in Utils.get_surrounding_indices(row, column, self.rows, self.columns):
             if self.cell_labels[r][c][1] == "safe":
                 number_of_surrounding_flags += 1
         if number_of_surrounding_flags != int(self.cell_labels[row][column][1]):
             return
-        for r, c in self.get_surrounding_indices(row, column):
+        for r, c in Utils.get_surrounding_indices(row, column, self.rows, self.columns):
             self.reveal_cell(r, c)
+
+    def start_game(self, row, column):
+        self.place_bombs(row, column) # Distribute bombs
+        self.count_bombs() # Assign numbers to cells
+        solver = Solver(self.board_values, (row, column))
+        solver.solve_board()
+        # while True:
+        #     self.place_bombs(row, column) # Distribute bombs
+        #     self.count_bombs() # Assign numbers to cells
+        #     solver = Solver(self.board_values, (row, column))
+        #     if solver.solve_board() == True:
+        #         break
+        self.game_started = True
+
+    def handle_game_over(self):
+        self.game_over = True
+        for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
+            if self.board_values[r,c] == -1:
+                self.reveal_cell(r, c)
+
+    def clear_board(self):
+        self.game_over, self.game_started = False, False
+        for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
+            self.cell_labels[r][c][1] = ""
+            self.update_tile_image(r, c)
 
     def place_bombs(self, r, c):
         safe_cells = 9 # 9 cells safe in beginning
@@ -151,33 +176,13 @@ class App:
         self.board_values = self.board_values.reshape((self.rows, self.columns))
 
     def count_bombs(self):
-        for row in range(self.rows):
-            for column in range(self.columns):
-                if self.board_values[row,column] == -1: 
-                    continue
-                number_of_surrounding_bombs = 0
-                for r, c in self.get_surrounding_indices(row,column):
-                    number_of_surrounding_bombs += 1 if self.board_values[r,c] == -1 else 0
-                self.board_values[row,column] = number_of_surrounding_bombs
-    
-    def handle_game_over(self):
-        self.game_over = True
-        for row in range(self.rows):
-            for column in range(self.columns):
-                if self.board_values[row,column] == -1:
-                    self.reveal_cell(row, column)
-
-    def clear_board(self):
-        self.game_over, self.game_started = False, False
-        for row in range(self.rows):
-            for column in range(self.columns):
-                self.cell_labels[row][column][1] = ""
-                self.update_tile_image(row, column)
-
-    def get_surrounding_indices(self, row, column):
-        for r in range(max(row-1, 0), min(row+2, self.rows)):
-            for c in range(max(column-1, 0), min(column+2, self.columns)):
-                yield (r, c)
+        for row, column in Utils.get_matrix_indicies(self.rows, self.columns):
+            if self.board_values[row,column] == -1: 
+                continue
+            number_of_surrounding_bombs = 0
+            for r, c in Utils.get_surrounding_indices(row, column, self.rows, self.columns):
+                number_of_surrounding_bombs += 1 if self.board_values[r,c] == -1 else 0
+            self.board_values[row,column] = number_of_surrounding_bombs
 
     def update_tile_image(self, r, c):
         tk_label: tk.Label = self.cell_labels[r][c][0] # Grab tk.Label in cell
@@ -189,17 +194,15 @@ class App:
 
     def on_window_resize(self, event: tk.Event):
         self.tile_size = (event.width // self.columns, event.height // self.rows)
-        for r in range(self.rows):
-            for c in range(self.columns):
-                self.update_tile_image(r, c)
+        for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
+            self.update_tile_image(r, c)
         
     def load_tile_images(self):
         img = Image.open("tiles.png")
         tiles = []
         img_width = img.width/4
         img_height = img.height/3
-        for r in range(3):
-            for c in range(4):
+        for r, c in Utils.get_matrix_indicies(3, 4):
                 tiles.append(img.crop((img_width*c, img_height*r, img_width*(c+1), img_height*(r+1))))
         self.tile_images = {
             "": tiles[0], "safe": tiles[1], "-1": tiles[2], "0": tiles[3],
