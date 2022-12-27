@@ -11,19 +11,42 @@ class App:
         self.root = tk.Tk()
         self.root.title("Minesweeper in tkinter")
 
+        self.load_tile_images()
+        self.bind_keyboard_keys()
+
+        self.outer_menu_bar = tk.Frame(self.root, relief=tk.RAISED, borderwidth=10)
+        self.outer_menu_bar.grid(row=0, column=0, sticky="news")
+
+        self.outer_menu_bar.rowconfigure(0, weight=1)
+        self.outer_menu_bar.columnconfigure(0, weight=1)
+
+        self.inner_menu_bar = tk.Frame(self.outer_menu_bar, relief=tk.SUNKEN, borderwidth=10)
+        self.inner_menu_bar.grid(row=0, column=0, sticky="news")
+
+        self.inner_menu_bar.rowconfigure(0, weight=1)
+        self.inner_menu_bar.columnconfigure(0, weight=1)
+        
+        self.frame = tk.Frame(self.root, relief = tk.RAISED, borderwidth = 10)
+        self.frame.grid(row=1, column=0, sticky="news")
+        self.frame.bind("<Configure>", self.on_window_resize)
+
+        self.restart_button = tk.Label(self.inner_menu_bar)
+        self.restart_button.pack(pady=(10,10))
+        self.restart_button.bind("<Button-1>", lambda event: self.clear_board())
+
+        
+        self.previous_configuration = [dimensions, cell_size, number_of_bombs]
+        self.initialize_board(*self.previous_configuration)
+
+    def initialize_board(self, dimensions: tuple, cell_size: int, number_of_bombs: int):
         self.rows, self.columns = dimensions
         self.tile_size = [cell_size, cell_size]
-        self.root.geometry(f"{self.columns*cell_size}x{self.rows*cell_size}")
+        self.root.geometry(f"{(self.columns)*cell_size}x{(self.rows+2)*cell_size}")
         self.root.minsize(self.columns*15, self.rows*15)
-
-        self.load_tile_images()
 
         self.root.rowconfigure(0, weight=1)
         self.root.columnconfigure(0, weight=1)
-
-        self.frame = tk.Frame(self.root)
-        self.frame.grid(row=0, column=0, sticky="news")
-        self.frame.bind("<Configure>", self.on_window_resize)
+        self.root.rowconfigure(1, weight=self.rows)
 
         self.cell_labels = [[None for j in range(self.columns)] for i in range(self.rows)]
 
@@ -41,12 +64,12 @@ class App:
 
         self.game_started = False
         self.game_over = False
+        self.game_won = False
         self.number_of_bombs = number_of_bombs
 
         self.selected_cell = [self.rows//2 - 1, self.columns//2 - 1]
-        self.bind_keyboard_keys()
 
-    def move_selection(self, new_pos):
+    def move_selection(self, new_pos, selected_board=True):
         r, c = new_pos
         pr, pc = self.selected_cell # Previous coordinates
         self.selected_cell = new_pos
@@ -136,14 +159,6 @@ class App:
     def start_game(self, row, column):
         self.place_bombs(row, column) # Distribute bombs
         self.count_bombs() # Assign numbers to cells
-        # solver = Solver(self.board_values, (row, column))
-        # solver.solve_board()
-        # while True:
-        #     self.place_bombs(row, column) # Distribute bombs
-        #     self.count_bombs() # Assign numbers to cells
-        #     solver = Solver(self.board_values, (row, column))
-        #     if solver.solve_board() == True:
-        #         break
         self.game_started = True
         self.start_time = time.time()
 
@@ -152,21 +167,25 @@ class App:
         for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
             if self.board_values[r,c] == -1:
                 self.reveal_cell(r, c)
+        self.update_menu_images()
         self.root.title(f"Minesweeper in tkinter | GAME OVER :(")
 
     def clear_board(self):
-        self.game_over, self.game_started = False, False
+        self.game_started, self.game_over, self.game_won = False, False, False
+        self.root.title(f"Minesweeper in tkinter")
         for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
             self.cell_labels[r][c][1] = ""
             self.update_tile_image(r, c)
+        self.update_menu_images()
 
     def check_for_win(self):
         for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
             if self.cell_labels[r][c][1] == "":
                 return
         self.game_over = True
+        self.game_won = True
+        self.update_menu_images()
         self.root.title(f"Minesweeper in tkinter | GAME WON in {(time.time() - self.start_time):.2f}s")
-
 
     def place_bombs(self, r, c):
         safe_cells = 9 # 9 cells safe in beginning
@@ -207,8 +226,25 @@ class App:
 
     def on_window_resize(self, event: tk.Event):
         self.tile_size = (event.width // self.columns, event.height // self.rows)
+        print(event.width, event.height)
         for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
             self.update_tile_image(r, c)
+        self.update_menu_images()
+
+    def update_menu_images(self):
+        restart_button_size = (int(self.tile_size[0]*1.5), int(self.tile_size[1]*1.5))
+
+        if self.game_won: # game won
+            img = self.tile_images["cooley"].resize(restart_button_size)
+        elif self.game_over and not self.game_won: # game lost
+            img = self.tile_images["sadey"].resize(restart_button_size)
+        else:
+            img = self.tile_images["smiley"].resize(restart_button_size)
+
+        # Smiley button
+        photo_img = ImageTk.PhotoImage(img)
+        self.restart_button.configure(image=photo_img)
+        self.restart_button.image = photo_img
         
     def load_tile_images(self):
         img = Image.open("tiles.png")
@@ -221,9 +257,11 @@ class App:
             "": tiles[0], "safe": tiles[1], "-1": tiles[2], "0": tiles[3],
             "1": tiles[4], "2": tiles[5], "3": tiles[6], "4": tiles[7],
             "5": tiles[8], "6": tiles[9], "7": tiles[10], "8": tiles[11],
-            "unsure": Image.open("qm.png"), "selected": Image.open("select.png")
+            "unsure": Image.open("qm.png"), "selected": Image.open("select.png"),
+            "smiley": Image.open("smiley.png"), "sadey": Image.open("sadey.png"),
+            "cooley": Image.open("cooley.png")
         }
-    
+        
     def bind_keyboard_keys(self):
         clamp_coordinate = lambda r, c: [max(min(self.rows-1, r), 0), max(min(self.columns-1, c), 0)]
         self.root.bind("w", lambda event: (
@@ -250,6 +288,6 @@ class App:
         ))
 
         
-if __name__ == "__main__": 
-    app = App(dimensions=(12,12), cell_size=40, number_of_bombs=8)
+if __name__ == "__main__":
+    app = App(dimensions=(12,12), cell_size=40, number_of_bombs=32)
     app.root.mainloop()
