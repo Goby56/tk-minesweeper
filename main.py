@@ -1,41 +1,43 @@
 import tkinter as tk
 import numpy as np
 from PIL import ImageTk, Image
-import time
+import time, json
 
 from utils import Utils
 from solver import Solver
 
-class App:
-    def __init__(self, dimensions: tuple, cell_size: int, number_of_bombs: int):
-        self.root = tk.Tk()
-        self.root.title("Minesweeper in tkinter")
+class Game:
+    def __init__(self, root: tk.Tk, frame: tk.Frame, dimensions: tuple, number_of_bombs: int, tile_images: list, switch_frame_func: callable):
+        self.root = root
+        self.frame = frame
+        self.tile_images = tile_images
+        self.root.resizable(True, True)
 
-        self.load_tile_images()
+        with open("config.json", "r") as f:
+            config = json.load(f)
+
         self.bind_keyboard_keys()
 
-        self.outer_menu_bar = tk.Frame(self.root, relief=tk.RAISED, borderwidth=10)
+        self.outer_menu_bar = tk.Frame(self.frame, relief=tk.RAISED, borderwidth=10)
         self.outer_menu_bar.grid(row=0, column=0, sticky="news")
-
         self.outer_menu_bar.rowconfigure(0, weight=1)
         self.outer_menu_bar.columnconfigure(0, weight=1)
 
         self.inner_menu_bar = tk.Frame(self.outer_menu_bar, relief=tk.SUNKEN, borderwidth=10)
         self.inner_menu_bar.grid(row=0, column=0, sticky="news")
-
         self.inner_menu_bar.rowconfigure(0, weight=1)
         self.inner_menu_bar.columnconfigure(0, weight=1)
-        
-        self.frame = tk.Frame(self.root, relief = tk.RAISED, borderwidth = 10)
-        self.frame.grid(row=1, column=0, sticky="news")
-        self.frame.bind("<Configure>", self.on_window_resize)
-
+    
         self.restart_button = tk.Label(self.inner_menu_bar)
         self.restart_button.pack(pady=(10,10))
-        self.restart_button.bind("<Button-1>", lambda event: self.clear_board())
+        self.restart_button.bind("<Button-1>", lambda event: switch_frame_func())
 
-        
-        self.previous_configuration = [dimensions, cell_size, number_of_bombs]
+        self.game_frame = tk.Frame(self.frame, relief = tk.RAISED, borderwidth = 10)
+        self.game_frame.grid(row=1, column=0, sticky="news")
+        self.game_frame.bind("<Configure>", self.on_window_resize)
+
+
+        self.previous_configuration = [dimensions, config["cell_size"], number_of_bombs]
         self.initialize_board(*self.previous_configuration)
 
     def initialize_board(self, dimensions: tuple, cell_size: int, number_of_bombs: int):
@@ -44,14 +46,14 @@ class App:
         self.root.geometry(f"{(self.columns)*cell_size}x{(self.rows+2)*cell_size}")
         self.root.minsize(self.columns*15, self.rows*15)
 
-        self.root.rowconfigure(0, weight=1)
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=self.rows)
+        self.frame.rowconfigure(0, weight=1)
+        self.frame.columnconfigure(0, weight=1)
+        self.frame.rowconfigure(1, weight=self.rows)
 
         self.cell_labels = [[None for j in range(self.columns)] for i in range(self.rows)]
 
         for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
-            tk_label = tk.Label(self.frame)
+            tk_label = tk.Label(self.game_frame)
             tk_label.grid(row=r, column=c, sticky="news")
             tk_label.bind("<Button-1>", self.clicked_on_cell)
             tk_label.bind("<Button-3>", self.mark_cell)
@@ -59,8 +61,8 @@ class App:
             # Actual button reference, Label reference used for visuals
             self.update_tile_image(r, c)
             
-        self.frame.columnconfigure(tuple(range(self.columns)), weight=1)
-        self.frame.rowconfigure(tuple(range(self.rows)), weight=1)
+        self.game_frame.columnconfigure(tuple(range(self.columns)), weight=1)
+        self.game_frame.rowconfigure(tuple(range(self.rows)), weight=1)
 
         self.game_started = False
         self.game_over = False
@@ -226,7 +228,6 @@ class App:
 
     def on_window_resize(self, event: tk.Event):
         self.tile_size = (event.width // self.columns, event.height // self.rows)
-        print(event.width, event.height)
         for r, c in Utils.get_matrix_indicies(self.rows, self.columns):
             self.update_tile_image(r, c)
         self.update_menu_images()
@@ -245,22 +246,6 @@ class App:
         photo_img = ImageTk.PhotoImage(img)
         self.restart_button.configure(image=photo_img)
         self.restart_button.image = photo_img
-        
-    def load_tile_images(self):
-        img = Image.open("tiles.png")
-        tiles = []
-        img_width = img.width/4
-        img_height = img.height/3
-        for r, c in Utils.get_matrix_indicies(3, 4):
-                tiles.append(img.crop((img_width*c, img_height*r, img_width*(c+1), img_height*(r+1))))
-        self.tile_images = {
-            "": tiles[0], "safe": tiles[1], "-1": tiles[2], "0": tiles[3],
-            "1": tiles[4], "2": tiles[5], "3": tiles[6], "4": tiles[7],
-            "5": tiles[8], "6": tiles[9], "7": tiles[10], "8": tiles[11],
-            "unsure": Image.open("qm.png"), "selected": Image.open("select.png"),
-            "smiley": Image.open("smiley.png"), "sadey": Image.open("sadey.png"),
-            "cooley": Image.open("cooley.png")
-        }
         
     def bind_keyboard_keys(self):
         clamp_coordinate = lambda r, c: [max(min(self.rows-1, r), 0), max(min(self.columns-1, c), 0)]
@@ -287,7 +272,128 @@ class App:
             self.clear_board()
         ))
 
+class Menu:
+    def __init__(self, root: tk.Tk, frame: tk.Tk, switch_frame_func: callable):
+        self.root = root
+        self.frame = frame
+        self.switch_frame = switch_frame_func
+        self.root.resizable(False, False)
+
+        with open("config.json", "r") as f:
+            self.config = json.load(f)
+            self.cell_size = self.config["cell_size"]
+
+        self.rows = self.config["default_grid"]["y"]
+        self.columns = self.config["default_grid"]["x"]
+        self.bomb_amount = self.config["default_bomb_amount"]
+
+        width = self.columns * self.cell_size
+        height = (self.rows+2)*self.cell_size
+        self.root.geometry(f"{width}x{height}")
+        # self.root.minsize(self.columns*15, self.rows*15)
+
+        self.load_images()
+
+        self.initialize_layout()
+
+        # self.start_game_button.grid(row=0, column=0, sticky="news")
+        # self.start_game_button.rowconfigure(0, weight=1)
+        # self.start_game_button.columnconfigure(0, weight=1)
+
+    def initialize_layout(self):
+        self.start_game_button = tk.Label(self.frame, relief=tk.RAISED, borderwidth=10)
+        self.start_game_button.grid(row=1, column=0, columnspan=3, pady=self.cell_size, sticky="")
+        photo_img = ImageTk.PhotoImage(self.images["start"].resize((self.cell_size*5, self.cell_size*2)))
+        self.start_game_button.configure(image=photo_img)
+        self.start_game_button.image = photo_img
+        self.start_game_button.bind("<Button-1>", lambda event: self.switch_frame(dimensions=(self.rows, self.columns), number_of_bombs=self.bomb_amount))
+
+        self.row_select = tk.Label(self.frame, relief=tk.RAISED, borderwidth=10)
+        self.row_select.grid(row=2, column=1, padx=self.cell_size*0.25)
+        photo_img = ImageTk.PhotoImage(self.images["row_select"].resize((self.cell_size*3, int(self.cell_size*1.5))))
+        self.row_select.configure(image=photo_img)
+        self.row_select.image = photo_img
+        self.row_select.bind("<MouseWheel>", lambda event: self.on_widget_scrolled(widget="rows", event=event))
+
+        self.column_select = tk.Label(self.frame, relief=tk.RAISED, borderwidth=10)
+        self.column_select.grid(row=2, column=0, padx=self.cell_size*0.25)
+        photo_img = ImageTk.PhotoImage(self.images["row_select"].resize((self.cell_size*3, int(self.cell_size*1.5))))
+        self.column_select.configure(image=photo_img)
+        self.column_select.image = photo_img
+        self.column_select.bind("<MouseWheel>", lambda event: self.on_widget_scrolled(widget="columns", event=event))
         
+        self.bomb_amount_select = tk.Label(self.frame, relief=tk.RAISED, borderwidth=10)
+        self.bomb_amount_select.grid(row=2, column=2, padx=self.cell_size*0.25)
+        photo_img = ImageTk.PhotoImage(self.images["row_select"].resize((self.cell_size*3, int(self.cell_size*1.5))))
+        self.bomb_amount_select.configure(image=photo_img)
+        self.bomb_amount_select.image = photo_img
+        self.bomb_amount_select.bind("<MouseWheel>", lambda event: self.on_widget_scrolled(widget="bomb_amount", event=event))
+
+        self.frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+    def on_widget_scrolled(self, widget: str, event: tk.Event):
+        value = getattr(self, widget)
+        setattr(self, widget, max(4, min(value + event.delta // 120, 99)))
+    
+        print("rows:", self.rows, " columns:", self.columns, " bombs:", self.bomb_amount)
+
+    def update_images(self):
+        pass
+
+    def load_images(self):
+        self.images = {
+            "start": Image.open("start.png"), "row_select": Image.open("row_select.png")
+        }
+        
+
+class App:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.resizable(False, False)
+        self.root.title("Minesweeper in tkinter")
+
+        self.load_tile_images()
+
+        self.load_menu()
+
+        self.in_game = False
+
+    def switch_frame(self, dimensions=None, number_of_bombs=None):
+        if self.in_game or dimensions == None or number_of_bombs == None:
+            self.game_frame.destroy()
+            self.load_menu()
+            self.in_game = False
+            return
+        self.menu_frame.destroy()
+        self.load_game(dimensions, number_of_bombs)
+        self.in_game = True
+
+    def load_menu(self):
+        self.menu_frame = tk.Frame(self.root, relief=tk.RAISED, borderwidth=10)
+        self.menu_frame.pack(fill=tk.BOTH, expand=True)
+        self.menu = Menu(self.root, self.menu_frame, self.switch_frame)
+
+    def load_game(self, dimensions: tuple, number_of_bombs: int):
+        self.game_frame = tk.Frame(self.root)
+        self.game_frame.pack(fill=tk.BOTH, expand=True)
+        self.game = Game(self.root, self.game_frame, dimensions, number_of_bombs, self.tile_images, self.switch_frame)
+
+    def load_tile_images(self):
+        img = Image.open("tiles.png")
+        tiles = []
+        img_width = img.width/4
+        img_height = img.height/3
+        for r, c in Utils.get_matrix_indicies(3, 4):
+                tiles.append(img.crop((img_width*c, img_height*r, img_width*(c+1), img_height*(r+1))))
+        self.tile_images = {
+            "": tiles[0], "safe": tiles[1], "-1": tiles[2], "0": tiles[3],
+            "1": tiles[4], "2": tiles[5], "3": tiles[6], "4": tiles[7],
+            "5": tiles[8], "6": tiles[9], "7": tiles[10], "8": tiles[11],
+            "unsure": Image.open("qm.png"), "selected": Image.open("select.png"),
+            "smiley": Image.open("smiley.png"), "sadey": Image.open("sadey.png"),
+            "cooley": Image.open("cooley.png")
+        }
+
 if __name__ == "__main__":
-    app = App(dimensions=(12,12), cell_size=40, number_of_bombs=32)
+    app = App()
     app.root.mainloop()

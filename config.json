@@ -1,0 +1,8 @@
+{
+    "cell_size": 30,
+    "default_grid": {
+        "x": 12,
+        "y": 12
+    },
+    "default_bomb_amount": 24
+}
